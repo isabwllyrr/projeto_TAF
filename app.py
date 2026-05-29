@@ -397,28 +397,43 @@ st.markdown(
         }
 
         [data-testid="stSidebar"] {
-            background: #edf1f5;
+            background: #f8fafc;
             border-right: 1px solid var(--line);
+        }
+
+        [data-testid="stSidebar"] > div:first-child {
+            padding-top: 1.15rem;
         }
 
         [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
             color: var(--muted);
         }
 
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3 {
+            color: var(--ink);
+            font-size: 0.86rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            margin-top: 0.65rem;
+        }
+
         [data-testid="stSidebar"] label {
-            color: #2d3748;
-            font-size: 0.82rem;
+            color: #556174;
+            font-size: 0.78rem;
             font-weight: 600;
         }
 
         [data-testid="stTextInput"] input,
         [data-testid="stDateInput"] input,
         [data-testid="stNumberInput"] input {
-            border: 1px solid transparent;
+            border: 1px solid #e6eaf0;
             border-radius: 8px;
             background: #ffffff;
             color: var(--ink);
-            min-height: 42px;
+            min-height: 40px;
+            box-shadow: 0 6px 18px rgba(23, 32, 51, 0.025);
         }
 
         [data-testid="stTextInput"] input:focus,
@@ -492,24 +507,54 @@ st.markdown(
         }
 
         .sidebar-brand {
-            background: #ffffff;
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 10px 28px rgba(23, 32, 51, 0.035);
+            border-left: 3px solid var(--accent);
+            padding: 0.15rem 0 0.15rem 0.75rem;
+            margin: 0.2rem 0 1.15rem;
         }
 
         .sidebar-brand strong {
             color: var(--ink);
             display: block;
-            font-size: 1rem;
-            margin-bottom: 0.25rem;
+            font-size: 1.02rem;
+            letter-spacing: 0;
+            margin-bottom: 0.12rem;
         }
 
         .sidebar-brand span {
             color: var(--muted);
-            font-size: 0.8rem;
+            font-size: 0.76rem;
+        }
+
+        .sidebar-section {
+            color: var(--accent-strong);
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: .09em;
+            margin: 1.2rem 0 0.55rem;
+            text-transform: uppercase;
+        }
+
+        [data-testid="stFileUploader"] {
+            background: #ffffff;
+            border: 1px dashed #cdd6e1;
+            border-radius: 8px;
+            padding: 0.7rem;
+            box-shadow: 0 6px 18px rgba(23, 32, 51, 0.025);
+        }
+
+        [data-testid="stFileUploader"] section {
+            padding: 0.35rem 0;
+            border: 0;
+        }
+
+        [data-testid="stFileUploader"] button {
+            border-radius: 8px;
+            border-color: #d5dce6;
+        }
+
+        [data-testid="stSidebar"] hr {
+            margin: 1rem 0;
+            border-color: #e1e7ef;
         }
 
         .section-head {
@@ -639,26 +684,26 @@ with st.sidebar:
     st.markdown(
         """
         <div class="sidebar-brand">
-            <strong>TAF Quant Lab</strong>
-            <span>Primeiro filtro de ativos para a Fase I</span>
+            <strong>TAF Quant</strong>
+            <span>Filtro inicial de ativos</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.header("Parametros")
+    st.markdown('<div class="sidebar-section">Universo</div>', unsafe_allow_html=True)
     raw_tickers = st.text_input("Ativos", value="AAPL, MSFT, NVDA, AMZN, GOOGL, JPM, XOM")
     benchmark = st.text_input("Benchmark", value="^GSPC").strip().upper()
     start = st.date_input("Data inicial", value=pd.Timestamp("2021-01-01"))
     end = st.date_input("Data final", value=pd.Timestamp.today())
-    risk_free = st.number_input("Taxa livre de risco anual", min_value=0.0, max_value=1.0, value=0.045, step=0.005)
-    st.divider()
+    risk_free = st.number_input("Taxa livre de risco", min_value=0.0, max_value=1.0, value=0.045, step=0.005)
+    st.markdown('<div class="sidebar-section">Fontes opcionais</div>', unsafe_allow_html=True)
     price_file = st.file_uploader(
-        "CSV de precos reais opcional",
+        "Precos reais (CSV)",
         type=["csv"],
         help="Use uma coluna date e uma coluna para cada ticker, incluindo o benchmark.",
     )
     factor_file = st.file_uploader(
-        "CSV Fama-French opcional",
+        "Fatores Fama-French (CSV)",
         type=["csv"],
         help="Opcional. Se nao enviar, o app tenta buscar os fatores reais de Kenneth French.",
     )
