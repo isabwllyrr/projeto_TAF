@@ -21,6 +21,40 @@ except ImportError:  # pragma: no cover - friendly message in the UI
 
 
 TRADING_DAYS = 252
+MARKET_PRESETS = {
+    "Estados Unidos": {
+        "benchmark": "^GSPC",
+        "assets": {
+            "Apple": "AAPL",
+            "Microsoft": "MSFT",
+            "NVIDIA": "NVDA",
+            "Amazon": "AMZN",
+            "Alphabet": "GOOGL",
+            "JPMorgan": "JPM",
+            "Exxon Mobil": "XOM",
+            "Tesla": "TSLA",
+            "Meta": "META",
+            "Berkshire Hathaway": "BRK-B",
+        },
+        "default": ["Apple", "Microsoft", "NVIDIA", "Amazon", "Alphabet", "JPMorgan", "Exxon Mobil"],
+    },
+    "Brasil": {
+        "benchmark": "^BVSP",
+        "assets": {
+            "Petrobras PN": "PETR4.SA",
+            "Vale ON": "VALE3.SA",
+            "Itau Unibanco PN": "ITUB4.SA",
+            "Banco do Brasil ON": "BBAS3.SA",
+            "B3 ON": "B3SA3.SA",
+            "Weg ON": "WEGE3.SA",
+            "Ambev ON": "ABEV3.SA",
+            "Magazine Luiza ON": "MGLU3.SA",
+            "Eletrobras ON": "ELET3.SA",
+            "Suzano ON": "SUZB3.SA",
+        },
+        "default": ["Petrobras PN", "Vale ON", "Itau Unibanco PN", "Banco do Brasil ON", "B3 ON", "Weg ON"],
+    },
+}
 YF_CACHE_DIR = Path(".yfinance_cache")
 YF_CACHE_DIR.mkdir(exist_ok=True)
 yf.set_tz_cache_location(str(YF_CACHE_DIR))
@@ -691,8 +725,24 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown('<div class="sidebar-section">Universo</div>', unsafe_allow_html=True)
-    raw_tickers = st.text_input("Ativos", value="AAPL, MSFT, NVDA, AMZN, GOOGL, JPM, XOM")
-    benchmark = st.text_input("Benchmark", value="^GSPC").strip().upper()
+    market = st.selectbox("Mercado", options=list(MARKET_PRESETS.keys()))
+    preset = MARKET_PRESETS[market]
+    selected_names = st.multiselect(
+        "Ativos",
+        options=list(preset["assets"].keys()),
+        default=preset["default"],
+        help="Selecione os ativos que entram no filtro inicial.",
+    )
+    selected_tickers = tuple(preset["assets"][name] for name in selected_names)
+    benchmark = st.selectbox(
+        "Benchmark",
+        options=[preset["benchmark"], "^GSPC", "^BVSP"],
+        index=0,
+        help="Indice usado como referencia nos modelos de risco.",
+    )
+    with st.expander("Avancado: tickers manuais"):
+        custom_tickers = st.text_input("Tickers extras", value="", placeholder="Ex: AAPL, MSFT ou PETR4.SA")
+        custom_benchmark = st.text_input("Benchmark manual", value="", placeholder="Ex: ^GSPC ou ^BVSP")
     start = st.date_input("Data inicial", value=pd.Timestamp("2021-01-01"))
     end = st.date_input("Data final", value=pd.Timestamp.today())
     risk_free = st.number_input("Taxa livre de risco", min_value=0.0, max_value=1.0, value=0.045, step=0.005)
@@ -708,7 +758,9 @@ with st.sidebar:
         help="Opcional. Se nao enviar, o app tenta buscar os fatores reais de Kenneth French.",
     )
 
-tickers = parse_tickers(raw_tickers)
+tickers = tuple(dict.fromkeys(selected_tickers + parse_tickers(custom_tickers)))
+if custom_benchmark.strip():
+    benchmark = custom_benchmark.strip().upper()
 
 if not tickers:
     st.warning("Informe pelo menos um ticker.")

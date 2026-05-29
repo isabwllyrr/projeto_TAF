@@ -23,12 +23,15 @@ streamlit run app.py
 
 ## Como usar
 
-1. Informe os tickers separados por virgula.
-2. Escolha um benchmark, por exemplo `^GSPC` para S&P 500 ou `^BVSP` para Ibovespa.
-3. Defina o periodo da analise e a taxa livre de risco anual.
-4. Consulte as abas de analise fundamentalista, CAPM, Fama-French, ARCH/GARCH e ranking.
+1. Escolha o mercado: Estados Unidos ou Brasil.
+2. Selecione os ativos pela lista lateral.
+3. Escolha um benchmark, por exemplo `^GSPC` para S&P 500 ou `^BVSP` para Ibovespa.
+4. Defina o periodo da analise e a taxa livre de risco anual.
+5. Consulte as abas de analise fundamentalista, CAPM, Fama-French, ARCH/GARCH e ranking.
 
 Para ativos brasileiros no Yahoo Finance, normalmente e necessario usar o sufixo `.SA`, como `PETR4.SA`, `VALE3.SA` e `ITUB4.SA`.
+
+Caso precise de ativos fora da lista, abra a opcao avancada "tickers manuais" na barra lateral.
 
 Os precos sao baixados do Yahoo Finance com a biblioteca `yfinance`. Se o Yahoo Finance nao responder no momento da apresentacao, envie um CSV de precos reais pela barra lateral.
 
