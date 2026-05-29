@@ -1,7 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
-.streamlit/
 .yfinance_cache/
 *.log
 Entrega_Fase_I/

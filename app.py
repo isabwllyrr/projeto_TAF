@@ -349,6 +349,18 @@ def metric_card(label: str, value: str, note: str) -> None:
     )
 
 
+def section_header(title: str, subtitle: str) -> None:
+    st.markdown(
+        f"""
+        <div class="section-head">
+            <h2>{title}</h2>
+            <p>{subtitle}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 st.set_page_config(page_title="Filtro de Risco - Fase I", layout="wide")
 
 st.markdown(
@@ -357,13 +369,16 @@ st.markdown(
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         :root {
-            --app-bg: #f6f7f9;
+            --app-bg: #f4f6f8;
             --panel: #ffffff;
             --ink: #172033;
             --muted: #687386;
             --line: #e5e9f0;
-            --accent: #1f9d8a;
-            --accent-soft: #e8f7f4;
+            --accent: #168f7b;
+            --accent-strong: #0f6b62;
+            --accent-soft: #e6f5f1;
+            --gold: #c08a35;
+            --blue: #405f93;
         }
 
         html, body, [class*="css"] {
@@ -376,14 +391,18 @@ st.markdown(
         }
 
         .block-container {
-            max-width: 1180px;
-            padding-top: 2rem;
+            max-width: 1220px;
+            padding-top: 1.35rem;
             padding-bottom: 3rem;
         }
 
         [data-testid="stSidebar"] {
-            background: #eef1f5;
+            background: #edf1f5;
             border-right: 1px solid var(--line);
+        }
+
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+            color: var(--muted);
         }
 
         [data-testid="stSidebar"] label {
@@ -410,9 +429,14 @@ st.markdown(
         }
 
         .hero {
-            padding: 0.3rem 0 1.2rem;
-            border-bottom: 1px solid var(--line);
-            margin-bottom: 1.2rem;
+            background:
+                linear-gradient(135deg, rgba(22,143,123,0.10), rgba(64,95,147,0.08)),
+                #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 1.35rem 1.45rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 16px 40px rgba(23, 32, 51, 0.05);
         }
 
         .eyebrow {
@@ -436,6 +460,73 @@ st.markdown(
             max-width: 760px;
             font-size: 0.98rem;
             margin: 0;
+        }
+
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin: 0.8rem 0 1.1rem;
+        }
+
+        .module-card {
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0.85rem 0.9rem;
+            box-shadow: 0 10px 28px rgba(23, 32, 51, 0.035);
+        }
+
+        .module-card b {
+            color: var(--ink);
+            display: block;
+            font-size: 0.93rem;
+            margin-bottom: 0.22rem;
+        }
+
+        .module-card span {
+            color: var(--muted);
+            display: block;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .sidebar-brand {
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 10px 28px rgba(23, 32, 51, 0.035);
+        }
+
+        .sidebar-brand strong {
+            color: var(--ink);
+            display: block;
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .sidebar-brand span {
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+
+        .section-head {
+            margin: 1.1rem 0 0.75rem;
+        }
+
+        .section-head h2 {
+            color: var(--ink);
+            font-size: 1.22rem;
+            margin: 0;
+            letter-spacing: 0;
+        }
+
+        .section-head p {
+            color: var(--muted);
+            font-size: 0.88rem;
+            margin: 0.25rem 0 0;
         }
 
         .metric-card {
@@ -473,6 +564,7 @@ st.markdown(
         .stTabs [data-baseweb="tab-list"] {
             gap: 0.3rem;
             border-bottom: 1px solid var(--line);
+            padding-top: 0.15rem;
         }
 
         .stTabs [data-baseweb="tab"] {
@@ -509,6 +601,22 @@ st.markdown(
         div[data-testid="stAlert"] {
             border-radius: 8px;
         }
+
+        @media (max-width: 900px) {
+            .module-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 620px) {
+            .module-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero h1 {
+                font-size: 1.65rem;
+            }
+        }
     </style>
 
     <section class="hero">
@@ -516,11 +624,27 @@ st.markdown(
         <h1>Filtro de Risco e Econometria</h1>
         <p>Analise de ativos com CAPM, fatores de Fama-French e volatilidade condicional para apoiar a selecao inicial da carteira.</p>
     </section>
+
+    <div class="module-grid">
+        <div class="module-card"><b>Fundamentalista</b><span>Qualidade, valor, setor e indicadores contabeis.</span></div>
+        <div class="module-card"><b>CAPM</b><span>Beta, alfa e premio de risco contra o benchmark.</span></div>
+        <div class="module-card"><b>Fama-French</b><span>Exposicao a mercado, tamanho (SMB) e valor (HML).</span></div>
+        <div class="module-card"><b>ARCH/GARCH</b><span>Dinamica da volatilidade e persistencia de risco.</span></div>
+    </div>
     """,
     unsafe_allow_html=True,
 )
 
 with st.sidebar:
+    st.markdown(
+        """
+        <div class="sidebar-brand">
+            <strong>TAF Quant Lab</strong>
+            <span>Primeiro filtro de ativos para a Fase I</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.header("Parametros")
     raw_tickers = st.text_input("Ativos", value="AAPL, MSFT, NVDA, AMZN, GOOGL, JPM, XOM")
     benchmark = st.text_input("Benchmark", value="^GSPC").strip().upper()
@@ -572,7 +696,7 @@ if asset_returns.empty:
 tabs = st.tabs(["Visao geral", "Fundamentalista", "CAPM", "Fama-French", "ARCH/GARCH", "Ranking"])
 
 with tabs[0]:
-    st.subheader("Precos ajustados")
+    section_header("Visao geral", "Evolucao dos precos ajustados, retorno, volatilidade e drawdown.")
     normalized = prices / prices.iloc[0]
     fig = px.line(normalized, labels={"value": "Preco normalizado", "index": "Data", "variable": "Ticker"})
     st.plotly_chart(style_figure(fig), use_container_width=True)
@@ -598,7 +722,7 @@ with tabs[0]:
     )
 
 with tabs[1]:
-    st.subheader("Analise fundamentalista")
+    section_header("Analise fundamentalista", "Indicadores de valor, rentabilidade, porte e estrutura financeira dos ativos.")
     fundamentals = load_fundamentals(tuple(asset_returns.columns))
     if fundamentals.empty:
         st.info(
@@ -623,7 +747,7 @@ with tabs[1]:
             st.plotly_chart(style_figure(fig, height=390), use_container_width=True)
 
 with tabs[2]:
-    st.subheader("CAPM: beta, alfa e premio de risco")
+    section_header("CAPM", "Estimacao de beta, alfa e premio de risco de cada ativo frente ao benchmark.")
     capm_df = capm_dataframe(asset_returns, benchmark_returns, risk_free)
     if capm_df.empty:
         st.warning("Amostra insuficiente para estimar CAPM. Cada ativo precisa de pelo menos 30 retornos alinhados ao benchmark.")
@@ -648,7 +772,7 @@ with tabs[2]:
         st.plotly_chart(style_figure(fig, height=390), use_container_width=True)
 
 with tabs[3]:
-    st.subheader("Modelo de tres fatores de Fama-French")
+    section_header("Modelo de tres fatores", "Decomposicao dos retornos em mercado, tamanho (SMB) e valor (HML).")
     factor_source = "CSV enviado"
     if factor_file is not None:
         try:
@@ -698,7 +822,7 @@ with tabs[3]:
             st.plotly_chart(style_figure(fig, height=390), use_container_width=True)
 
 with tabs[4]:
-    st.subheader("ARCH/GARCH: dinamica da volatilidade")
+    section_header("ARCH/GARCH", "Modelagem da heterocedasticidade condicional e da persistencia da volatilidade.")
     if arch_model is None:
         st.error("Instale a dependencia `arch` para habilitar esta aba.")
     else:
@@ -721,7 +845,7 @@ with tabs[4]:
             st.plotly_chart(style_figure(fig, height=390), use_container_width=True)
 
 with tabs[5]:
-    st.subheader("Filtro consolidado")
+    section_header("Filtro consolidado", "Ranking final combinando retorno, volatilidade, drawdown, beta e risco condicional.")
     perf = annualized_performance(asset_returns)
     capm_df = capm_dataframe(asset_returns, benchmark_returns, risk_free)
     garch_df = garch_summary(asset_returns) if arch_model is not None else pd.DataFrame()
