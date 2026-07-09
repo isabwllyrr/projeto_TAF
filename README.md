@@ -1,27 +1,19 @@
-# Projeto TAF - Filtro Quantitativo de Ativos
+# Projeto TAF - Entrega II
 
-Este projeto implementa um Web App em Streamlit para apoiar a primeira etapa de selecao de ativos. A ideia e reunir, em uma unica tela, indicadores fundamentalistas e medidas econometricas de risco para ajudar o usuario a comparar empresas antes de montar uma carteira.
+Web App em Streamlit para analise quantitativa de ativos brasileiros. O projeto evolui a Fase I, mantendo os filtros econometricos de risco e adicionando um motor preditivo com validacao temporal e backtesting.
 
-O app foi desenvolvido para a Fase I da disciplina, com foco em analise de risco estatistico e econometria aplicada a series financeiras.
+O foco desta versao e trabalhar com dados do Brasil, usando ativos negociados na B3 e o Ibovespa como benchmark padrao.
 
-## O que o app faz
+## Funcionalidades
 
-O usuario escolhe um mercado, seleciona os ativos e define o periodo da analise. A partir disso, o aplicativo baixa dados reais e organiza os resultados em abas:
-
-- **Visao geral**: mostra a evolucao dos precos ajustados, retorno anual, volatilidade anual e drawdown maximo.
-- **Fundamentalista**: resume setor, valor de mercado, P/L, P/VP, ROE, margem liquida, dividend yield e divida/patrimonio.
-- **CAPM**: estima beta, alfa, premio de risco, R2 e p-valor do beta para cada ativo.
-- **Fama-French**: decompõe os retornos nos fatores de mercado, tamanho (SMB) e valor (HML).
-- **ARCH/GARCH**: estima a volatilidade condicional e a persistencia da volatilidade.
-- **Ranking**: combina retorno, volatilidade, drawdown, beta e risco condicional em um filtro final de risco relativo.
-
-## Fontes de dados
-
-Os precos e indicadores fundamentalistas sao obtidos pelo Yahoo Finance usando a biblioteca `yfinance`.
-
-Os fatores de Fama-French sao buscados automaticamente na Kenneth French Data Library por meio da biblioteca `pandas-datareader`. Caso a fonte automatica nao esteja disponivel, o app tambem aceita um CSV manual com os fatores.
-
-O projeto nao utiliza dados simulados. Se as fontes online falharem, e necessario enviar um CSV com dados reais.
+- **Selecao de ativos brasileiros**: lista de tickers da B3 com benchmark `^BVSP`.
+- **Analise fundamentalista**: setor, valor de mercado, P/L, P/VP, ROE, margem liquida, dividend yield e divida/patrimonio.
+- **CAPM**: beta, alfa, premio de risco, R2 e p-valor do beta.
+- **Filtros por beta e alpha**: criterios explicitos para verificar se o ativo passa no filtro de risco.
+- **Fama-French**: decomposicao dos retornos em mercado, tamanho (SMB) e valor (HML), usando CSV de fatores brasileiros.
+- **ARCH/GARCH**: volatilidade condicional, persistencia da volatilidade e AIC.
+- **Predicao e backtesting**: Random Forest, Boosting/XGBoost, validacao temporal com `sktime` e comparacao da estrategia contra buy and hold.
+- **Deep Learning**: GRU e LSTM implementados com PyTorch para capturar dependencias temporais.
 
 ## Como executar
 
@@ -34,7 +26,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Depois, acesse o endereco exibido pelo Streamlit, normalmente:
+Depois, acesse o endereco mostrado pelo Streamlit, normalmente:
 
 ```text
 http://localhost:8501
@@ -42,28 +34,29 @@ http://localhost:8501
 
 ## Como usar
 
-1. Escolha o mercado na barra lateral.
-2. Selecione os ativos pela lista.
-3. Confira ou altere o benchmark.
-4. Defina o periodo historico.
-5. Ajuste a taxa livre de risco anual.
-6. Analise os resultados nas abas do dashboard.
+1. Selecione os ativos brasileiros na barra lateral.
+2. Confira o benchmark, que por padrao e o Ibovespa (`^BVSP`).
+3. Defina o periodo historico e a taxa livre de risco.
+4. Ajuste os filtros CAPM de beta maximo e alfa anual minimo.
+5. Use as abas para analisar fundamentos, risco, predicao e backtesting.
 
-Para ativos fora das listas sugeridas, use a opcao avancada de tickers manuais.
+## Dados
 
-## CSV de precos reais
+Os precos e os indicadores fundamentalistas sao obtidos no Yahoo Finance por meio da biblioteca `yfinance`.
 
-Se for necessario carregar precos manualmente, o CSV deve conter uma coluna de data e uma coluna para cada ativo, incluindo o benchmark.
+O app nao utiliza dados simulados. Se a consulta online falhar, e necessario enviar um CSV com precos reais.
 
-Exemplo:
+### CSV de precos reais
 
-| date | AAPL | MSFT | NVDA | ^GSPC |
+O CSV deve conter uma coluna de data e uma coluna para cada ativo, incluindo o benchmark:
+
+| date | PETR4.SA | VALE3.SA | ITUB4.SA | ^BVSP |
 | --- | --- | --- | --- | --- |
-| 2024-01-02 | 185.64 | 368.85 | 48.17 | 4742.83 |
+| 2024-01-02 | 37.78 | 76.10 | 32.15 | 132697.00 |
 
-## CSV de fatores Fama-French
+### CSV de fatores Fama-French
 
-O CSV de fatores deve conter:
+Para ativos brasileiros, o app espera fatores brasileiros. O CSV deve conter:
 
 | Coluna | Descricao |
 | --- | --- |
@@ -73,10 +66,8 @@ O CSV de fatores deve conter:
 | `hml` | Fator valor |
 | `rf` | Taxa livre de risco diaria, opcional |
 
-Os fatores podem estar em formato decimal (`0.01`) ou percentual (`1.0`).
+## Metodologia
 
-## Observacao metodologica
+O CAPM mede a sensibilidade dos ativos ao mercado e gera filtros por beta e alpha. O modelo de Fama-French acrescenta a decomposicao dos retornos por tamanho e valor. O GARCH modela a volatilidade condicional. Na Entrega II, o app adiciona modelos de aprendizado de maquina para prever retornos futuros e avalia essas previsoes com validacao cruzada para series temporais e backtesting.
 
-O CAPM usa os retornos excedentes do ativo e do benchmark para estimar a sensibilidade ao mercado. O modelo de Fama-French amplia essa analise ao separar os efeitos de mercado, tamanho e valor. Ja o GARCH ajuda a observar a dinamica da volatilidade ao longo do tempo.
-
-Com isso, o app funciona como um primeiro filtro: ele nao decide automaticamente quais ativos comprar, mas organiza evidencias quantitativas para apoiar a comparacao entre alternativas.
+O resultado e um painel de apoio a decisao: ele nao substitui uma recomendacao de investimento, mas organiza evidencias quantitativas para comparar ativos brasileiros.

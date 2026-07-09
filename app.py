@@ -12,7 +12,20 @@ import plotly.graph_objects as go
 import statsmodels.api as sm
 import streamlit as st
 import yfinance as yf
-from pandas_datareader import data as web_data
+from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sktime.split import ExpandingWindowSplitter
+
+try:
+    from xgboost import XGBRegressor
+except ImportError:  # pragma: no cover - optional boosting engine
+    XGBRegressor = None
+
+try:
+    import torch
+    from torch import nn
+except ImportError:  # pragma: no cover - optional deep learning engine
+    torch = nn = None
 
 try:
     from arch import arch_model
@@ -22,22 +35,6 @@ except ImportError:  # pragma: no cover - friendly message in the UI
 
 TRADING_DAYS = 252
 MARKET_PRESETS = {
-    "Estados Unidos": {
-        "benchmark": "^GSPC",
-        "assets": {
-            "Apple": "AAPL",
-            "Microsoft": "MSFT",
-            "NVIDIA": "NVDA",
-            "Amazon": "AMZN",
-            "Alphabet": "GOOGL",
-            "JPMorgan": "JPM",
-            "Exxon Mobil": "XOM",
-            "Tesla": "TSLA",
-            "Meta": "META",
-            "Berkshire Hathaway": "BRK-B",
-        },
-        "default": ["Apple", "Microsoft", "NVIDIA", "Amazon", "Alphabet", "JPMorgan", "Exxon Mobil"],
-    },
     "Brasil": {
         "benchmark": "^BVSP",
         "assets": {
@@ -221,17 +218,6 @@ def load_factor_csv(uploaded_file: io.BytesIO | None) -> pd.DataFrame:
     return factors.dropna(subset=["mkt-rf", "smb", "hml"])
 
 
-@st.cache_data(show_spinner=False)
-def load_fama_french_factors(start: str, end: str) -> pd.DataFrame:
-    raw = web_data.DataReader("F-F_Research_Data_Factors_daily", "famafrench", start=start, end=end)[0]
-    raw.index = pd.to_datetime(raw.index)
-    raw = raw.rename(columns={"Mkt-RF": "mkt-rf", "SMB": "smb", "HML": "hml", "RF": "rf"})
-    raw.columns = [str(col).strip().lower() for col in raw.columns]
-    for col in ["mkt-rf", "smb", "hml", "rf"]:
-        raw[col] = pd.to_numeric(raw[col], errors="coerce") / 100
-    return raw[["mkt-rf", "smb", "hml", "rf"]].dropna()
-
-
 def fama_french(asset_returns: pd.DataFrame, factors: pd.DataFrame, risk_free_annual: float) -> list[FamaFrenchResult]:
     if factors.empty:
         return []
@@ -310,6 +296,194 @@ def capm_dataframe(asset_returns: pd.DataFrame, benchmark_returns: pd.Series, ri
     columns = ["asset", "alpha_daily", "alpha_annual", "beta", "risk_premium_annual", "r2", "p_value_beta"]
     rows = [result.__dict__ for result in capm(asset_returns, benchmark_returns, risk_free_annual)]
     return pd.DataFrame(rows, columns=columns)
+
+
+def prediction_frame(asset_returns: pd.DataFrame, benchmark_returns: pd.Series, asset: str) -> pd.DataFrame:
+    base = pd.concat(
+        {
+            "retorno": asset_returns[asset],
+            "mercado": benchmark_returns,
+        },
+        axis=1,
+    ).dropna()
+
+    frame = pd.DataFrame(index=base.index)
+    for lag in [1, 2, 3, 5, 10]:
+        frame[f"ret_lag_{lag}"] = base["retorno"].shift(lag)
+        frame[f"mkt_lag_{lag}"] = base["mercado"].shift(lag)
+
+    frame["media_5"] = base["retorno"].rolling(5).mean().shift(1)
+    frame["vol_5"] = base["retorno"].rolling(5).std().shift(1)
+    frame["media_21"] = base["retorno"].rolling(21).mean().shift(1)
+    frame["vol_21"] = base["retorno"].rolling(21).std().shift(1)
+    frame["target"] = base["retorno"].shift(-1)
+    return frame.dropna()
+
+
+def model_catalog(random_state: int = 42) -> dict[str, object]:
+    models: dict[str, object] = {
+        "Random Forest": RandomForestRegressor(
+            n_estimators=160,
+            max_depth=6,
+            min_samples_leaf=5,
+            random_state=random_state,
+            n_jobs=-1,
+        ),
+        "Boosting": HistGradientBoostingRegressor(
+            max_iter=180,
+            learning_rate=0.045,
+            max_leaf_nodes=12,
+            random_state=random_state,
+        ),
+    }
+    if XGBRegressor is not None:
+        models["XGBoost"] = XGBRegressor(
+            n_estimators=180,
+            max_depth=3,
+            learning_rate=0.045,
+            subsample=0.85,
+            colsample_bytree=0.85,
+            objective="reg:squarederror",
+            random_state=random_state,
+        )
+    return models
+
+
+def backtest_ml_models(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    feature_cols = [col for col in frame.columns if col != "target"]
+    X = frame[feature_cols]
+    y = frame["target"]
+
+    if len(frame) < 160:
+        return pd.DataFrame(), pd.DataFrame()
+
+    splitter = ExpandingWindowSplitter(
+        initial_window=min(252, max(90, len(frame) // 2)),
+        step_length=10,
+        fh=[1],
+    )
+    models = model_catalog()
+    rows = []
+    predictions = []
+
+    for model_name, model in models.items():
+        fold_actual = []
+        fold_pred = []
+        strategy_returns = []
+        bh_returns = []
+        dates = []
+
+        for train_idx, test_idx in splitter.split(y):
+            if len(test_idx) == 0:
+                continue
+
+            test_pos = int(test_idx[0])
+            fitted = model.fit(X.iloc[train_idx], y.iloc[train_idx])
+            pred = float(fitted.predict(X.iloc[[test_pos]])[0])
+            actual = float(y.iloc[test_pos])
+            signal = 1 if pred > 0 else 0
+
+            dates.append(y.index[test_pos])
+            fold_pred.append(pred)
+            fold_actual.append(actual)
+            strategy_returns.append(signal * actual)
+            bh_returns.append(actual)
+
+        if not fold_actual:
+            continue
+
+        actual_arr = np.array(fold_actual)
+        pred_arr = np.array(fold_pred)
+        strategy_arr = np.array(strategy_returns)
+        bh_arr = np.array(bh_returns)
+        rows.append(
+            {
+                "Modelo": model_name,
+                "RMSE": float(np.sqrt(mean_squared_error(actual_arr, pred_arr))),
+                "MAE": float(mean_absolute_error(actual_arr, pred_arr)),
+                "Acuracia direcional": float((np.sign(pred_arr) == np.sign(actual_arr)).mean()),
+                "Retorno estrategia": float(np.prod(1 + strategy_arr) - 1),
+                "Buy and hold": float(np.prod(1 + bh_arr) - 1),
+                "Operacoes": len(actual_arr),
+            }
+        )
+
+        predictions.extend(
+            {
+                "Data": date,
+                "Modelo": model_name,
+                "Previsto": pred,
+                "Realizado": actual,
+                "Retorno estrategia": strat,
+                "Retorno buy and hold": bh,
+            }
+            for date, pred, actual, strat, bh in zip(dates, fold_pred, fold_actual, strategy_returns, bh_returns)
+        )
+
+    return pd.DataFrame(rows), pd.DataFrame(predictions)
+
+
+def fit_recurrent_model(frame: pd.DataFrame, model_type: str) -> tuple[float | None, str]:
+    if torch is None or nn is None:
+        return None, "PyTorch nao esta instalado neste ambiente."
+
+    feature_cols = [col for col in frame.columns if col != "target"]
+    if len(frame) < 220:
+        return None, "Amostra insuficiente para treinar rede recorrente."
+
+    values = frame[feature_cols + ["target"]].to_numpy(dtype=float)
+    X_raw = values[:, :-1]
+    y_raw = values[:, -1]
+    mean = X_raw.mean(axis=0)
+    std = X_raw.std(axis=0)
+    std[std == 0] = 1
+    X_scaled = (X_raw - mean) / std
+
+    lookback = 12
+    X_seq = []
+    y_seq = []
+    for i in range(lookback, len(X_scaled)):
+        X_seq.append(X_scaled[i - lookback : i])
+        y_seq.append(y_raw[i])
+
+    X_seq = np.array(X_seq)
+    y_seq = np.array(y_seq)
+    split = int(len(X_seq) * 0.8)
+    if split <= 0 or split >= len(X_seq):
+        return None, "Amostra insuficiente para separar treino e teste."
+
+    class RecurrentRegressor(nn.Module):
+        def __init__(self, kind: str, n_features: int):
+            super().__init__()
+            layer_cls = nn.LSTM if kind == "LSTM" else nn.GRU
+            self.rnn = layer_cls(input_size=n_features, hidden_size=16, batch_first=True)
+            self.head = nn.Linear(16, 1)
+
+        def forward(self, x):
+            output, _ = self.rnn(x)
+            return self.head(output[:, -1, :]).squeeze(-1)
+
+    torch.manual_seed(42)
+    X_train = torch.tensor(X_seq[:split], dtype=torch.float32)
+    y_train = torch.tensor(y_seq[:split], dtype=torch.float32)
+    X_test = torch.tensor(X_seq[split:], dtype=torch.float32)
+
+    model = RecurrentRegressor(model_type, X_seq.shape[2])
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    loss_fn = nn.MSELoss()
+
+    model.train()
+    for _ in range(35):
+        optimizer.zero_grad()
+        loss = loss_fn(model(X_train), y_train)
+        loss.backward()
+        optimizer.step()
+
+    model.eval()
+    with torch.no_grad():
+        pred = model(X_test).numpy()
+    rmse = float(np.sqrt(mean_squared_error(y_seq[split:], pred)))
+    return rmse, "ok"
 
 
 def format_percent_columns(df: pd.DataFrame, columns: Iterable[str]) -> pd.DataFrame:
@@ -395,7 +569,7 @@ def section_header(title: str, subtitle: str) -> None:
     )
 
 
-st.set_page_config(page_title="Filtro de Risco - Fase I", layout="wide")
+st.set_page_config(page_title="Projeto TAF - Entrega II", layout="wide")
 
 st.markdown(
     """
@@ -699,9 +873,9 @@ st.markdown(
     </style>
 
     <section class="hero">
-        <div class="eyebrow">Fase I - Gestao Quantitativa</div>
-        <h1>Filtro de Risco e Econometria</h1>
-        <p>Analise de ativos com CAPM, fatores de Fama-French e volatilidade condicional para apoiar a selecao inicial da carteira.</p>
+        <div class="eyebrow">Fase II - Gestao Quantitativa Brasil</div>
+        <h1>Filtro de Risco, Predicao e Backtesting</h1>
+        <p>Analise de ativos brasileiros com filtros econometricos, modelos preditivos e validacao temporal para apoiar a selecao inicial da carteira.</p>
     </section>
 
     <div class="module-grid">
@@ -709,6 +883,7 @@ st.markdown(
         <div class="module-card"><b>CAPM</b><span>Beta, alfa e premio de risco contra o benchmark.</span></div>
         <div class="module-card"><b>Fama-French</b><span>Exposicao a mercado, tamanho (SMB) e valor (HML).</span></div>
         <div class="module-card"><b>ARCH/GARCH</b><span>Dinamica da volatilidade e persistencia de risco.</span></div>
+        <div class="module-card"><b>Predicao</b><span>Random Forest, Boosting, validacao temporal e backtesting.</span></div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -719,7 +894,7 @@ with st.sidebar:
         """
         <div class="sidebar-brand">
             <strong>TAF Quant</strong>
-            <span>Filtro inicial de ativos</span>
+            <span>Ativos brasileiros e predicao</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -736,16 +911,19 @@ with st.sidebar:
     selected_tickers = tuple(preset["assets"][name] for name in selected_names)
     benchmark = st.selectbox(
         "Benchmark",
-        options=[preset["benchmark"], "^GSPC", "^BVSP"],
+        options=[preset["benchmark"], "BOVA11.SA"],
         index=0,
         help="Indice usado como referencia nos modelos de risco.",
     )
     with st.expander("Avancado: tickers manuais"):
-        custom_tickers = st.text_input("Tickers extras", value="", placeholder="Ex: AAPL, MSFT ou PETR4.SA")
-        custom_benchmark = st.text_input("Benchmark manual", value="", placeholder="Ex: ^GSPC ou ^BVSP")
+        custom_tickers = st.text_input("Tickers extras", value="", placeholder="Ex: RENT3.SA, RADL3.SA")
+        custom_benchmark = st.text_input("Benchmark manual", value="", placeholder="Ex: ^BVSP ou BOVA11.SA")
     start = st.date_input("Data inicial", value=pd.Timestamp("2021-01-01"))
     end = st.date_input("Data final", value=pd.Timestamp.today())
-    risk_free = st.number_input("Taxa livre de risco", min_value=0.0, max_value=1.0, value=0.045, step=0.005)
+    risk_free = st.number_input("Taxa livre de risco", min_value=0.0, max_value=1.0, value=0.105, step=0.005)
+    st.markdown('<div class="sidebar-section">Filtros CAPM</div>', unsafe_allow_html=True)
+    max_beta_filter = st.slider("Beta maximo", min_value=0.0, max_value=3.0, value=1.4, step=0.1)
+    min_alpha_filter = st.slider("Alfa anual minimo", min_value=-0.50, max_value=0.50, value=0.0, step=0.01)
     st.markdown('<div class="sidebar-section">Fontes opcionais</div>', unsafe_allow_html=True)
     price_file = st.file_uploader(
         "Precos reais (CSV)",
@@ -755,7 +933,7 @@ with st.sidebar:
     factor_file = st.file_uploader(
         "Fatores Fama-French (CSV)",
         type=["csv"],
-        help="Opcional. Se nao enviar, o app tenta buscar os fatores reais de Kenneth French.",
+        help="Use fatores brasileiros de mercado, SMB, HML e, opcionalmente, RF.",
     )
 
 tickers = tuple(dict.fromkeys(selected_tickers + parse_tickers(custom_tickers)))
@@ -790,7 +968,7 @@ if asset_returns.empty:
     st.error("Nenhum ativo informado retornou dados validos.")
     st.stop()
 
-tabs = st.tabs(["Visao geral", "Fundamentalista", "CAPM", "Fama-French", "ARCH/GARCH", "Ranking"])
+tabs = st.tabs(["Visao geral", "Fundamentalista", "CAPM", "Fama-French", "ARCH/GARCH", "Predicao", "Ranking"])
 
 with tabs[0]:
     section_header("Visao geral", "Evolucao dos precos ajustados, retorno, volatilidade e drawdown.")
@@ -878,16 +1056,12 @@ with tabs[3]:
             st.error(str(exc))
             factors = pd.DataFrame()
     else:
-        try:
-            factors = load_fama_french_factors(str(start), str(end))
-            factor_source = "Kenneth French Data Library"
-        except Exception:
-            factors = pd.DataFrame()
+        factors = pd.DataFrame()
 
     if factors.empty:
         st.info(
-            "Nao foi possivel carregar os fatores reais SMB e HML automaticamente. "
-            "Envie um CSV de fatores para estimar Fama-French; isso nao depende de adicionar mais ativos."
+            "Para ativos brasileiros, envie um CSV com fatores brasileiros de mercado, SMB e HML. "
+            "Isso evita usar fatores dos EUA em uma aplicacao focada no Brasil."
         )
     else:
         st.caption(f"Fonte dos fatores: {factor_source}")
@@ -942,6 +1116,49 @@ with tabs[4]:
             st.plotly_chart(style_figure(fig, height=390), use_container_width=True)
 
 with tabs[5]:
+    section_header("Predicao e backtesting", "Modelos de machine learning treinados com validacao temporal para prever retornos futuros.")
+    prediction_asset = st.selectbox("Ativo para predicao", options=list(asset_returns.columns))
+    frame_pred = prediction_frame(asset_returns, benchmark_returns, prediction_asset)
+
+    if frame_pred.empty or len(frame_pred) < 160:
+        st.warning("Amostra insuficiente para treinar e validar os modelos preditivos.")
+    else:
+        metrics_ml, predictions_ml = backtest_ml_models(frame_pred)
+        if metrics_ml.empty:
+            st.warning("Nao foi possivel gerar validacao temporal para os modelos.")
+        else:
+            view_metrics = metrics_ml.copy()
+            view_metrics["RMSE"] = view_metrics["RMSE"].map(lambda value: f"{value:.4%}")
+            view_metrics["MAE"] = view_metrics["MAE"].map(lambda value: f"{value:.4%}")
+            view_metrics["Acuracia direcional"] = view_metrics["Acuracia direcional"].map(pct)
+            view_metrics["Retorno estrategia"] = view_metrics["Retorno estrategia"].map(pct)
+            view_metrics["Buy and hold"] = view_metrics["Buy and hold"].map(pct)
+            st.dataframe(view_metrics, use_container_width=True, hide_index=True)
+
+            curve = predictions_ml.copy()
+            curve["Estrategia acumulada"] = curve.groupby("Modelo")["Retorno estrategia"].transform(lambda s: (1 + s).cumprod() - 1)
+            curve["Buy and hold acumulado"] = curve.groupby("Modelo")["Retorno buy and hold"].transform(lambda s: (1 + s).cumprod() - 1)
+            curve_plot = curve.melt(
+                id_vars=["Data", "Modelo"],
+                value_vars=["Estrategia acumulada", "Buy and hold acumulado"],
+                var_name="Serie",
+                value_name="Retorno acumulado",
+            )
+            fig = px.line(curve_plot, x="Data", y="Retorno acumulado", color="Modelo", line_dash="Serie")
+            st.plotly_chart(style_figure(fig, height=410), use_container_width=True)
+
+        dl_rows = []
+        for model_type in ["GRU", "LSTM"]:
+            rmse, status = fit_recurrent_model(frame_pred, model_type)
+            dl_rows.append({"Modelo": model_type, "RMSE holdout": rmse, "Status": status})
+        dl_df = pd.DataFrame(dl_rows)
+        dl_view = dl_df.copy()
+        dl_view["RMSE holdout"] = dl_view["RMSE holdout"].map(lambda value: f"{value:.4%}" if pd.notna(value) else "-")
+        st.dataframe(dl_view, use_container_width=True, hide_index=True)
+        if torch is None:
+            st.info("GRU e LSTM estao estruturados no app, mas exigem PyTorch instalado no ambiente.")
+
+with tabs[6]:
     section_header("Filtro consolidado", "Ranking final combinando retorno, volatilidade, drawdown, beta e risco condicional.")
     perf = annualized_performance(asset_returns)
     capm_df = capm_dataframe(asset_returns, benchmark_returns, risk_free)
@@ -961,6 +1178,9 @@ with tabs[5]:
         + ranking["Vol. condicional anual"].rank(pct=True)
     )
     ranking["Score risco"] = ranking["Score risco"].fillna(ranking["Score risco"].median())
+    ranking["Passa filtro beta"] = ranking["beta"].le(max_beta_filter)
+    ranking["Passa filtro alpha"] = ranking["alpha_annual"].ge(min_alpha_filter)
+    ranking["Passa filtros CAPM"] = ranking["Passa filtro beta"] & ranking["Passa filtro alpha"]
     if len(ranking) >= 3 and ranking["Score risco"].nunique() >= 3:
         ranking["Classificacao"] = pd.qcut(
             ranking["Score risco"].rank(method="first"),
@@ -974,6 +1194,7 @@ with tabs[5]:
         columns={
             "asset": "Ativo",
             "beta": "Beta",
+            "alpha_annual": "Alfa anual",
             "risk_premium_annual": "Premio de risco anual",
             "r2": "R2 CAPM",
         }
@@ -985,16 +1206,18 @@ with tabs[5]:
             "Volatilidade anual",
             "Drawdown maximo",
             "Beta",
+            "Alfa anual",
             "Premio de risco anual",
             "Vol. condicional anual",
             "Persistencia",
+            "Passa filtros CAPM",
         ]
     ].sort_values("Classificacao")
 
     st.dataframe(
         format_percent_columns(
             view,
-            ["Retorno anual", "Volatilidade anual", "Drawdown maximo", "Premio de risco anual", "Vol. condicional anual"],
+            ["Retorno anual", "Volatilidade anual", "Drawdown maximo", "Alfa anual", "Premio de risco anual", "Vol. condicional anual"],
         ),
         use_container_width=True,
         hide_index=True,
