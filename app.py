@@ -795,6 +795,30 @@ st.markdown(
             margin: 0.25rem 0 0;
         }
 
+        .explain-box {
+            background: rgba(18, 26, 44, 0.94);
+            border: 1px solid var(--line);
+            border-left: 3px solid var(--accent);
+            border-radius: 8px;
+            padding: 0.9rem 1rem;
+            margin: 0.55rem 0 0.9rem;
+            color: #dbe4ef;
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+        }
+
+        .explain-box b {
+            color: #ffffff;
+        }
+
+        .explain-box ul {
+            margin: 0.55rem 0 0 1.1rem;
+            padding: 0;
+        }
+
+        .explain-box li {
+            margin: 0.25rem 0;
+        }
+
         .metric-card {
             background: rgba(18, 26, 44, 0.94);
             border: 1px solid var(--line);
@@ -1133,24 +1157,74 @@ with tabs[4]:
             st.plotly_chart(style_figure(fig, height=390), use_container_width=True)
 
 with tabs[5]:
-    section_header("Predicao e backtesting", "Modelos de machine learning treinados com validacao temporal para prever retornos futuros.")
-    prediction_asset = st.selectbox("Ativo para predicao", options=list(asset_returns.columns))
+    section_header("Predicao e backtesting", "Previsao do retorno do proximo periodo e teste historico de uma estrategia baseada no sinal previsto.")
+    st.markdown(
+        """
+        <div class="explain-box">
+            <b>O que esta aba faz?</b>
+            <ul>
+                <li>Escolhe um ativo e monta variaveis com retornos defasados, medias moveis, volatilidade e retorno do mercado.</li>
+                <li>Treina modelos para prever se o proximo retorno tende a ser positivo ou negativo.</li>
+                <li>Testa a previsao no passado usando janelas temporais, sempre treinando no passado e testando no futuro.</li>
+                <li>Compara uma estrategia simples baseada na previsao contra comprar e segurar o ativo.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    prediction_asset = st.selectbox("Ativo analisado", options=list(asset_returns.columns))
     frame_pred = prediction_frame(asset_returns, benchmark_returns, prediction_asset)
 
     if frame_pred.empty or len(frame_pred) < 160:
         st.warning("Amostra insuficiente para treinar e validar os modelos preditivos.")
     else:
+        metric_cols_pred = st.columns(3)
+        with metric_cols_pred[0]:
+            metric_card("Observacoes usadas", str(len(frame_pred)), "Depois das defasagens")
+        with metric_cols_pred[1]:
+            metric_card("Alvo previsto", "Retorno t+1", "Proximo retorno diario")
+        with metric_cols_pred[2]:
+            metric_card("Validacao", "Temporal", "Sem embaralhar os dados")
+
         metrics_ml, predictions_ml = backtest_ml_models(frame_pred)
         if metrics_ml.empty:
             st.warning("Nao foi possivel gerar validacao temporal para os modelos.")
         else:
+            st.markdown(
+                """
+                <div class="explain-box">
+                    <b>Como ler a tabela?</b>
+                    <ul>
+                        <li><b>RMSE e MAE</b>: erros de previsao. Quanto menores, melhor.</li>
+                        <li><b>Acuracia direcional</b>: porcentagem de vezes em que o modelo acertou o sinal do retorno.</li>
+                        <li><b>Retorno estrategia</b>: retorno acumulado ao entrar comprado quando a previsao e positiva.</li>
+                        <li><b>Buy and hold</b>: retorno de comprar o ativo e manter durante o mesmo periodo de teste.</li>
+                    </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             view_metrics = metrics_ml.copy()
             view_metrics["RMSE"] = view_metrics["RMSE"].map(lambda value: f"{value:.4%}")
             view_metrics["MAE"] = view_metrics["MAE"].map(lambda value: f"{value:.4%}")
             view_metrics["Acuracia direcional"] = view_metrics["Acuracia direcional"].map(pct)
             view_metrics["Retorno estrategia"] = view_metrics["Retorno estrategia"].map(pct)
             view_metrics["Buy and hold"] = view_metrics["Buy and hold"].map(pct)
-            st.dataframe(view_metrics, use_container_width=True, hide_index=True)
+            st.dataframe(
+                view_metrics.rename(
+                    columns={
+                        "Modelo": "Modelo",
+                        "RMSE": "Erro RMSE",
+                        "MAE": "Erro MAE",
+                        "Acuracia direcional": "Acerto do sinal",
+                        "Retorno estrategia": "Retorno da estrategia",
+                        "Buy and hold": "Comprar e manter",
+                        "Operacoes": "Testes",
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
 
             curve = predictions_ml.copy()
             curve["Estrategia acumulada"] = curve.groupby("Modelo")["Retorno estrategia"].transform(lambda s: (1 + s).cumprod() - 1)
@@ -1162,8 +1236,18 @@ with tabs[5]:
                 value_name="Retorno acumulado",
             )
             fig = px.line(curve_plot, x="Data", y="Retorno acumulado", color="Modelo", line_dash="Serie")
+            fig.update_layout(title="Backtesting: estrategia preditiva vs. comprar e manter")
             st.plotly_chart(style_figure(fig, height=410), use_container_width=True)
 
+        st.markdown(
+            """
+            <div class="explain-box">
+                <b>Redes recorrentes</b><br>
+                GRU e LSTM sao modelos de deep learning para sequencias. Aqui eles usam uma janela recente dos indicadores para tentar capturar dependencias temporais mais complexas.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         dl_rows = []
         for model_type in ["GRU", "LSTM"]:
             rmse, status = fit_recurrent_model(frame_pred, model_type)
@@ -1171,7 +1255,11 @@ with tabs[5]:
         dl_df = pd.DataFrame(dl_rows)
         dl_view = dl_df.copy()
         dl_view["RMSE holdout"] = dl_view["RMSE holdout"].map(lambda value: f"{value:.4%}" if pd.notna(value) else "-")
-        st.dataframe(dl_view, use_container_width=True, hide_index=True)
+        st.dataframe(
+            dl_view.rename(columns={"RMSE holdout": "Erro RMSE em teste", "Status": "Situacao"}),
+            use_container_width=True,
+            hide_index=True,
+        )
         if torch is None:
             st.info("GRU e LSTM estao estruturados no app, mas exigem PyTorch instalado no ambiente.")
 
