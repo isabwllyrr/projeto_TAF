@@ -528,7 +528,7 @@ def style_figure(fig: go.Figure, height: int = 430) -> go.Figure:
         height=height,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font={"family": "Inter, Segoe UI, Arial", "color": "#172033", "size": 13},
+        font={"family": "Inter, Segoe UI, Arial", "color": "#e5e7eb", "size": 13},
         margin={"l": 20, "r": 20, "t": 24, "b": 20},
         legend={
             "orientation": "h",
@@ -539,8 +539,8 @@ def style_figure(fig: go.Figure, height: int = 430) -> go.Figure:
             "font": {"size": 12},
         },
     )
-    fig.update_xaxes(showgrid=False, zeroline=False, linecolor="#d9dee8")
-    fig.update_yaxes(gridcolor="#edf0f5", zeroline=False, linecolor="#d9dee8")
+    fig.update_xaxes(showgrid=False, zeroline=False, linecolor="#334155", tickfont={"color": "#cbd5e1"}, title_font={"color": "#e5e7eb"})
+    fig.update_yaxes(gridcolor="#223049", zeroline=False, linecolor="#334155", tickfont={"color": "#cbd5e1"}, title_font={"color": "#e5e7eb"})
     return fig
 
 
@@ -577,19 +577,20 @@ st.markdown(
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         :root {
-            --app-bg: #eef2f6;
-            --panel: #ffffff;
-            --ink: #111827;
-            --muted: #667085;
-            --line: #d9e0ea;
-            --accent: #0f9f88;
-            --accent-strong: #087968;
-            --accent-soft: #e3f7f1;
-            --gold: #c7933e;
-            --blue: #2f5f8f;
-            --sidebar: #111827;
-            --sidebar-soft: #1f2937;
-            --sidebar-muted: #aab4c2;
+            --app-bg: #0b1020;
+            --panel: #121a2c;
+            --panel-soft: #172033;
+            --ink: #f8fafc;
+            --muted: #aab4c2;
+            --line: #263247;
+            --accent: #2dd4bf;
+            --accent-strong: #5eead4;
+            --accent-soft: rgba(45, 212, 191, 0.12);
+            --gold: #f2b84b;
+            --blue: #82aaff;
+            --sidebar: #080d19;
+            --sidebar-soft: #101827;
+            --sidebar-muted: #9aa7b8;
         }
 
         html, body, [class*="css"] {
@@ -598,13 +599,15 @@ st.markdown(
 
         .stApp {
             background:
-                linear-gradient(180deg, #f8fafc 0%, var(--app-bg) 42%, #eef2f6 100%);
+                radial-gradient(circle at 18% 0%, rgba(45, 212, 191, 0.13), transparent 28rem),
+                radial-gradient(circle at 95% 12%, rgba(130, 170, 255, 0.11), transparent 24rem),
+                var(--app-bg);
             color: var(--ink);
         }
 
         .block-container {
-            max-width: 1220px;
-            padding-top: 1.35rem;
+            max-width: 1240px;
+            padding-top: 1rem;
             padding-bottom: 3rem;
         }
 
@@ -640,10 +643,10 @@ st.markdown(
         [data-testid="stTextInput"] input,
         [data-testid="stDateInput"] input,
         [data-testid="stNumberInput"] input {
-            border: 1px solid #334155;
+            border: 1px solid #2f3b52;
             border-radius: 8px;
-            background: #f8fafc;
-            color: #0f172a;
+            background: #0f172a;
+            color: #f8fafc;
             min-height: 40px;
             box-shadow: none;
         }
@@ -657,13 +660,14 @@ st.markdown(
 
         .hero {
             background:
-                linear-gradient(135deg, rgba(15,159,136,0.24), rgba(47,95,143,0.16)),
+                linear-gradient(135deg, rgba(45,212,191,0.18), rgba(130,170,255,0.10)),
                 #111827;
-            border: 1px solid #273447;
+            border: 1px solid #2b3950;
             border-radius: 8px;
-            padding: 1.65rem 1.75rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 18px 44px rgba(17, 24, 39, 0.16);
+            padding: 1.05rem 1.25rem;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+            overflow: visible;
         }
 
         .eyebrow {
@@ -676,46 +680,47 @@ st.markdown(
 
         .hero h1 {
             color: #ffffff;
-            font-size: 2.25rem;
+            font-size: 1.95rem;
             line-height: 1.1;
             letter-spacing: 0;
-            margin: 0.35rem 0;
+            margin: 0.25rem 0;
         }
 
         .hero p {
             color: #cbd5e1;
             max-width: 820px;
-            font-size: 0.98rem;
+            font-size: 0.92rem;
             margin: 0;
         }
 
         .module-grid {
             display: grid;
             grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 0.75rem;
-            margin: 0.8rem 0 1.1rem;
+            gap: 0.65rem;
+            margin: 0.65rem 0 1rem;
         }
 
         .module-card {
-            background: #ffffff;
+            background: rgba(18, 26, 44, 0.92);
             border: 1px solid var(--line);
             border-top: 3px solid var(--accent);
             border-radius: 8px;
-            padding: 0.95rem;
-            box-shadow: 0 12px 30px rgba(17, 24, 39, 0.055);
+            padding: 0.78rem 0.82rem;
+            min-height: 96px;
+            box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22);
         }
 
         .module-card b {
-            color: var(--ink);
+            color: #f8fafc;
             display: block;
-            font-size: 0.93rem;
+            font-size: 0.86rem;
             margin-bottom: 0.22rem;
         }
 
         .module-card span {
             color: var(--muted);
             display: block;
-            font-size: 0.78rem;
+            font-size: 0.72rem;
             line-height: 1.35;
         }
 
@@ -751,7 +756,7 @@ st.markdown(
         }
 
         [data-testid="stFileUploader"] {
-            background: #f8fafc;
+            background: #0f172a;
             border: 1px dashed #64748b;
             border-radius: 8px;
             padding: 0.7rem;
@@ -791,12 +796,12 @@ st.markdown(
         }
 
         .metric-card {
-            background: #ffffff;
+            background: rgba(18, 26, 44, 0.94);
             border: 1px solid var(--line);
             border-radius: 8px;
             padding: 1rem 1.05rem;
             min-height: 120px;
-            box-shadow: 0 14px 34px rgba(17, 24, 39, 0.06);
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
         }
 
         .metric-card span {
@@ -808,7 +813,7 @@ st.markdown(
         }
 
         .metric-card strong {
-            color: var(--ink);
+            color: #ffffff;
             display: block;
             font-size: 1.65rem;
             letter-spacing: 0;
@@ -826,11 +831,11 @@ st.markdown(
             gap: 0.3rem;
             border-bottom: 0;
             padding-top: 0.15rem;
-            background: #ffffff;
+            background: rgba(18, 26, 44, 0.96);
             border: 1px solid var(--line);
             border-radius: 8px;
             padding: 0.35rem;
-            box-shadow: 0 10px 28px rgba(17, 24, 39, 0.035);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
         }
 
         .stTabs [data-baseweb="tab"] {
@@ -841,17 +846,17 @@ st.markdown(
         }
 
         .stTabs [aria-selected="true"] {
-            background: #111827;
+            background: #2dd4bf;
             color: #ffffff;
-            border: 1px solid #111827;
+            border: 1px solid #2dd4bf;
         }
 
         [data-testid="stDataFrame"],
         [data-testid="stPlotlyChart"] {
-            background: #ffffff;
+            background: rgba(18, 26, 44, 0.94);
             border: 1px solid var(--line);
             border-radius: 8px;
-            box-shadow: 0 14px 34px rgba(17, 24, 39, 0.055);
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
         }
 
         [data-testid="stPlotlyChart"] {
