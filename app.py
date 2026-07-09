@@ -577,16 +577,19 @@ st.markdown(
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         :root {
-            --app-bg: #f4f6f8;
+            --app-bg: #eef2f6;
             --panel: #ffffff;
-            --ink: #172033;
-            --muted: #687386;
-            --line: #e5e9f0;
-            --accent: #168f7b;
-            --accent-strong: #0f6b62;
-            --accent-soft: #e6f5f1;
-            --gold: #c08a35;
-            --blue: #405f93;
+            --ink: #111827;
+            --muted: #667085;
+            --line: #d9e0ea;
+            --accent: #0f9f88;
+            --accent-strong: #087968;
+            --accent-soft: #e3f7f1;
+            --gold: #c7933e;
+            --blue: #2f5f8f;
+            --sidebar: #111827;
+            --sidebar-soft: #1f2937;
+            --sidebar-muted: #aab4c2;
         }
 
         html, body, [class*="css"] {
@@ -594,7 +597,8 @@ st.markdown(
         }
 
         .stApp {
-            background: var(--app-bg);
+            background:
+                linear-gradient(180deg, #f8fafc 0%, var(--app-bg) 42%, #eef2f6 100%);
             color: var(--ink);
         }
 
@@ -605,8 +609,8 @@ st.markdown(
         }
 
         [data-testid="stSidebar"] {
-            background: #f8fafc;
-            border-right: 1px solid var(--line);
+            background: var(--sidebar);
+            border-right: 1px solid #0b1220;
         }
 
         [data-testid="stSidebar"] > div:first-child {
@@ -614,12 +618,12 @@ st.markdown(
         }
 
         [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-            color: var(--muted);
+            color: var(--sidebar-muted);
         }
 
         [data-testid="stSidebar"] h2,
         [data-testid="stSidebar"] h3 {
-            color: var(--ink);
+            color: #f8fafc;
             font-size: 0.86rem;
             font-weight: 700;
             letter-spacing: .08em;
@@ -628,7 +632,7 @@ st.markdown(
         }
 
         [data-testid="stSidebar"] label {
-            color: #556174;
+            color: #d7dde7;
             font-size: 0.78rem;
             font-weight: 600;
         }
@@ -636,12 +640,12 @@ st.markdown(
         [data-testid="stTextInput"] input,
         [data-testid="stDateInput"] input,
         [data-testid="stNumberInput"] input {
-            border: 1px solid #e6eaf0;
+            border: 1px solid #334155;
             border-radius: 8px;
-            background: #ffffff;
-            color: var(--ink);
+            background: #f8fafc;
+            color: #0f172a;
             min-height: 40px;
-            box-shadow: 0 6px 18px rgba(23, 32, 51, 0.025);
+            box-shadow: none;
         }
 
         [data-testid="stTextInput"] input:focus,
@@ -653,17 +657,17 @@ st.markdown(
 
         .hero {
             background:
-                linear-gradient(135deg, rgba(22,143,123,0.10), rgba(64,95,147,0.08)),
-                #ffffff;
-            border: 1px solid var(--line);
+                linear-gradient(135deg, rgba(15,159,136,0.24), rgba(47,95,143,0.16)),
+                #111827;
+            border: 1px solid #273447;
             border-radius: 8px;
-            padding: 1.35rem 1.45rem;
+            padding: 1.65rem 1.75rem;
             margin-bottom: 1rem;
-            box-shadow: 0 16px 40px rgba(23, 32, 51, 0.05);
+            box-shadow: 0 18px 44px rgba(17, 24, 39, 0.16);
         }
 
         .eyebrow {
-            color: var(--accent);
+            color: #8be0cf;
             font-size: 0.78rem;
             font-weight: 700;
             letter-spacing: .08em;
@@ -671,23 +675,23 @@ st.markdown(
         }
 
         .hero h1 {
-            color: var(--ink);
-            font-size: 2.15rem;
+            color: #ffffff;
+            font-size: 2.25rem;
             line-height: 1.1;
             letter-spacing: 0;
             margin: 0.35rem 0;
         }
 
         .hero p {
-            color: var(--muted);
-            max-width: 760px;
+            color: #cbd5e1;
+            max-width: 820px;
             font-size: 0.98rem;
             margin: 0;
         }
 
         .module-grid {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 0.75rem;
             margin: 0.8rem 0 1.1rem;
         }
@@ -695,9 +699,10 @@ st.markdown(
         .module-card {
             background: #ffffff;
             border: 1px solid var(--line);
+            border-top: 3px solid var(--accent);
             border-radius: 8px;
-            padding: 0.85rem 0.9rem;
-            box-shadow: 0 10px 28px rgba(23, 32, 51, 0.035);
+            padding: 0.95rem;
+            box-shadow: 0 12px 30px rgba(17, 24, 39, 0.055);
         }
 
         .module-card b {
@@ -715,13 +720,16 @@ st.markdown(
         }
 
         .sidebar-brand {
-            border-left: 3px solid var(--accent);
-            padding: 0.15rem 0 0.15rem 0.75rem;
+            background: var(--sidebar-soft);
+            border: 1px solid #334155;
+            border-left: 3px solid #31c6ac;
+            border-radius: 8px;
+            padding: 0.85rem 0.9rem;
             margin: 0.2rem 0 1.15rem;
         }
 
         .sidebar-brand strong {
-            color: var(--ink);
+            color: #ffffff;
             display: block;
             font-size: 1.02rem;
             letter-spacing: 0;
@@ -729,12 +737,12 @@ st.markdown(
         }
 
         .sidebar-brand span {
-            color: var(--muted);
+            color: var(--sidebar-muted);
             font-size: 0.76rem;
         }
 
         .sidebar-section {
-            color: var(--accent-strong);
+            color: #8be0cf;
             font-size: 0.72rem;
             font-weight: 800;
             letter-spacing: .09em;
@@ -743,11 +751,11 @@ st.markdown(
         }
 
         [data-testid="stFileUploader"] {
-            background: #ffffff;
-            border: 1px dashed #cdd6e1;
+            background: #f8fafc;
+            border: 1px dashed #64748b;
             border-radius: 8px;
             padding: 0.7rem;
-            box-shadow: 0 6px 18px rgba(23, 32, 51, 0.025);
+            box-shadow: none;
         }
 
         [data-testid="stFileUploader"] section {
@@ -762,7 +770,7 @@ st.markdown(
 
         [data-testid="stSidebar"] hr {
             margin: 1rem 0;
-            border-color: #e1e7ef;
+            border-color: #334155;
         }
 
         .section-head {
@@ -783,12 +791,12 @@ st.markdown(
         }
 
         .metric-card {
-            background: var(--panel);
+            background: #ffffff;
             border: 1px solid var(--line);
             border-radius: 8px;
             padding: 1rem 1.05rem;
             min-height: 120px;
-            box-shadow: 0 10px 28px rgba(23, 32, 51, 0.04);
+            box-shadow: 0 14px 34px rgba(17, 24, 39, 0.06);
         }
 
         .metric-card span {
@@ -816,22 +824,26 @@ st.markdown(
 
         .stTabs [data-baseweb="tab-list"] {
             gap: 0.3rem;
-            border-bottom: 1px solid var(--line);
+            border-bottom: 0;
             padding-top: 0.15rem;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0.35rem;
+            box-shadow: 0 10px 28px rgba(17, 24, 39, 0.035);
         }
 
         .stTabs [data-baseweb="tab"] {
-            border-radius: 8px 8px 0 0;
+            border-radius: 8px;
             color: var(--muted);
             font-weight: 600;
-            padding: 0.7rem 1rem;
+            padding: 0.65rem 0.85rem;
         }
 
         .stTabs [aria-selected="true"] {
-            background: #ffffff;
-            color: var(--ink);
-            border: 1px solid var(--line);
-            border-bottom-color: #ffffff;
+            background: #111827;
+            color: #ffffff;
+            border: 1px solid #111827;
         }
 
         [data-testid="stDataFrame"],
@@ -839,7 +851,7 @@ st.markdown(
             background: #ffffff;
             border: 1px solid var(--line);
             border-radius: 8px;
-            box-shadow: 0 10px 28px rgba(23, 32, 51, 0.03);
+            box-shadow: 0 14px 34px rgba(17, 24, 39, 0.055);
         }
 
         [data-testid="stPlotlyChart"] {
