@@ -91,11 +91,4 @@ O app foi pensado como uma ferramenta de apoio analitico. Ele nao gera recomenda
 
 Na Fase III, o destaque esta na integracao entre predicao e alocacao. O usuario escolhe o peso das previsoes no retorno esperado, e o app mostra como essa escolha altera a composicao final da carteira. A carteira otimizada deixa de ser um modulo isolado e passa a ser consequencia dos filtros de risco e do motor preditivo.
 
-## Roteiro sugerido para apresentacao
 
-1. Apresente o problema de negocio e a arquitetura em tres camadas: risco, predicao e otimizacao.
-2. Mostre a Fase I: CAPM, Fama-French e ARCH/GARCH, explicando como beta, alpha e volatilidade ajudam a filtrar ativos.
-3. Mostre a Fase II: modelos de ML/DL, validacao temporal com `sktime` e backtesting sem vazamento de dados.
-4. Mostre a Fase III: retorno esperado historico versus retorno ajustado por previsao, fronteira eficiente, Markowitz e HRP.
-5. Demonstre um estudo de caso alterando o peso das previsoes e observando a mudanca nos pesos da carteira.
-6. Encerre com limitacoes honestas: dependencia do Yahoo Finance, qualidade dos fatores Fama-French brasileiros, risco de overfitting e necessidade de rebalanceamento futuro.
