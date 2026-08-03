@@ -12,9 +12,12 @@ import plotly.graph_objects as go
 import statsmodels.api as sm
 import streamlit as st
 import yfinance as yf
+from scipy.cluster.hierarchy import leaves_list, linkage
 from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sktime.split import ExpandingWindowSplitter
+from scipy.optimize import minimize
+from scipy.spatial.distance import squareform
 
 try:
     from xgboost import XGBRegressor
@@ -486,6 +489,204 @@ def fit_recurrent_model(frame: pd.DataFrame, model_type: str) -> tuple[float | N
     return rmse, "ok"
 
 
+def next_return_forecast(frame: pd.DataFrame, model_name: str) -> float | None:
+    if len(frame) < 160:
+        return None
+
+    models = model_catalog()
+    if model_name not in models:
+        return None
+
+    feature_cols = [col for col in frame.columns if col != "target"]
+    train = frame.iloc[:-1]
+    latest = frame.iloc[[-1]]
+    if train.empty:
+        return None
+
+    model = models[model_name]
+    fitted = model.fit(train[feature_cols], train["target"])
+    return float(fitted.predict(latest[feature_cols])[0])
+
+
+def expected_return_table(
+    asset_returns: pd.DataFrame,
+    benchmark_returns: pd.Series,
+    model_name: str,
+    prediction_weight: float,
+) -> pd.DataFrame:
+    rows = []
+
+    for asset in asset_returns.columns:
+        hist_annual = float(asset_returns[asset].mean() * TRADING_DAYS)
+        frame = prediction_frame(asset_returns, benchmark_returns, asset)
+        forecast_daily = next_return_forecast(frame, model_name)
+        forecast_annual = np.nan if forecast_daily is None else float(np.clip(forecast_daily * TRADING_DAYS, -0.80, 0.80))
+        blended = hist_annual if pd.isna(forecast_annual) else (1 - prediction_weight) * hist_annual + prediction_weight * forecast_annual
+
+        rows.append(
+            {
+                "Ativo": asset,
+                "Retorno historico anual": hist_annual,
+                "Previsao anualizada": forecast_annual,
+                "Retorno usado na otimizacao": blended,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def portfolio_statistics(weights: np.ndarray, expected_returns: pd.Series, covariance: pd.DataFrame, risk_free_annual: float) -> dict[str, float]:
+    expected = float(weights @ expected_returns.to_numpy())
+    variance = float(weights @ covariance.to_numpy() @ weights)
+    volatility = float(np.sqrt(max(variance, 0)))
+    sharpe = (expected - risk_free_annual) / volatility if volatility > 0 else np.nan
+    return {"Retorno esperado": expected, "Volatilidade": volatility, "Sharpe": sharpe}
+
+
+def optimize_portfolio(
+    expected_returns: pd.Series,
+    covariance: pd.DataFrame,
+    risk_free_annual: float,
+    objective: str,
+    max_weight: float,
+    target_return: float | None = None,
+) -> np.ndarray | None:
+    n_assets = len(expected_returns)
+    if n_assets == 0:
+        return None
+
+    bounds = [(0.0, max_weight)] * n_assets
+    initial = np.repeat(1 / n_assets, n_assets)
+    constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
+
+    if target_return is not None:
+        mu = expected_returns.to_numpy()
+        constraints.append({"type": "eq", "fun": lambda weights, mu=mu: weights @ mu - target_return})
+
+    cov = covariance.to_numpy()
+    rf = risk_free_annual
+    mu = expected_returns.to_numpy()
+
+    def variance(weights: np.ndarray) -> float:
+        return float(weights @ cov @ weights)
+
+    def negative_sharpe(weights: np.ndarray) -> float:
+        vol = np.sqrt(max(variance(weights), 0))
+        if vol <= 0:
+            return 1e6
+        return -float((weights @ mu - rf) / vol)
+
+    objective_fn = variance if objective in {"min_vol", "target"} else negative_sharpe
+    result = minimize(objective_fn, initial, method="SLSQP", bounds=bounds, constraints=constraints)
+
+    if not result.success:
+        return None
+
+    weights = np.clip(result.x, 0, max_weight)
+    total = weights.sum()
+    return weights / total if total > 0 else None
+
+
+def efficient_frontier(
+    expected_returns: pd.Series,
+    covariance: pd.DataFrame,
+    max_weight: float,
+    points: int = 25,
+) -> pd.DataFrame:
+    min_ret = float(expected_returns.min())
+    max_ret = float(expected_returns.max())
+    if np.isclose(min_ret, max_ret):
+        return pd.DataFrame()
+
+    rows = []
+    for target in np.linspace(min_ret, max_ret, points):
+        weights = optimize_portfolio(expected_returns, covariance, 0.0, "target", max_weight, target_return=target)
+        if weights is None:
+            continue
+        stats = portfolio_statistics(weights, expected_returns, covariance, 0.0)
+        rows.append({"Retorno esperado": stats["Retorno esperado"], "Volatilidade": stats["Volatilidade"]})
+    return pd.DataFrame(rows)
+
+
+def hrp_weights(asset_returns: pd.DataFrame) -> pd.Series:
+    covariance = asset_returns.cov() * TRADING_DAYS
+    corr = asset_returns.corr().clip(-1, 1)
+    if len(corr) <= 1:
+        return pd.Series([1.0], index=asset_returns.columns)
+
+    distance = np.sqrt((1 - corr) / 2)
+    condensed = squareform(distance.to_numpy(), checks=False)
+    ordered_idx = leaves_list(linkage(condensed, method="single"))
+    ordered_assets = list(corr.index[ordered_idx])
+    weights = pd.Series(1.0, index=ordered_assets)
+    clusters = [ordered_assets]
+
+    def cluster_variance(cluster: list[str]) -> float:
+        cov = covariance.loc[cluster, cluster]
+        inv_diag = 1 / np.diag(cov)
+        inv_diag = inv_diag / inv_diag.sum()
+        return float(inv_diag @ cov.to_numpy() @ inv_diag)
+
+    while clusters:
+        cluster = clusters.pop(0)
+        if len(cluster) <= 1:
+            continue
+
+        split = len(cluster) // 2
+        left = cluster[:split]
+        right = cluster[split:]
+        left_var = cluster_variance(left)
+        right_var = cluster_variance(right)
+        alpha = 1 - left_var / (left_var + right_var) if (left_var + right_var) > 0 else 0.5
+        weights[left] *= alpha
+        weights[right] *= 1 - alpha
+        clusters.extend([left, right])
+
+    weights = weights.reindex(asset_returns.columns).fillna(0)
+    return weights / weights.sum()
+
+
+def portfolio_comparison(
+    expected_returns: pd.Series,
+    covariance: pd.DataFrame,
+    asset_returns: pd.DataFrame,
+    risk_free_annual: float,
+    max_weight: float,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    portfolios: dict[str, np.ndarray] = {}
+    n_assets = len(expected_returns)
+    portfolios["Pesos iguais"] = np.repeat(1 / n_assets, n_assets)
+
+    max_sharpe = optimize_portfolio(expected_returns, covariance, risk_free_annual, "max_sharpe", max_weight)
+    if max_sharpe is not None:
+        portfolios["Markowitz - max Sharpe"] = max_sharpe
+
+    min_vol = optimize_portfolio(expected_returns, covariance, risk_free_annual, "min_vol", max_weight)
+    if min_vol is not None:
+        portfolios["Markowitz - menor volatilidade"] = min_vol
+
+    portfolios["HRP"] = hrp_weights(asset_returns).to_numpy()
+
+    metrics = []
+    weights_rows = []
+    for name, weights in portfolios.items():
+        stats = portfolio_statistics(weights, expected_returns, covariance, risk_free_annual)
+        metrics.append({"Carteira": name, **stats})
+        for asset, weight in zip(expected_returns.index, weights):
+            weights_rows.append({"Carteira": name, "Ativo": asset, "Peso": float(weight)})
+
+    return pd.DataFrame(metrics), pd.DataFrame(weights_rows)
+
+
+def stress_test_portfolios(weights_df: pd.DataFrame, asset_returns: pd.DataFrame, shock: float) -> pd.DataFrame:
+    pivot = weights_df.pivot(index="Ativo", columns="Carteira", values="Peso").fillna(0)
+    annual_vol = asset_returns[pivot.index].std() * np.sqrt(TRADING_DAYS)
+    relative_risk = annual_vol / annual_vol.mean()
+    asset_shocks = (shock * relative_risk).clip(lower=shock * 1.8, upper=shock * 0.45)
+    shocked = pivot.mul(asset_shocks, axis=0).sum(axis=0)
+    return pd.DataFrame({"Carteira": shocked.index, "Impacto estimado": shocked.values})
+
+
 def format_percent_columns(df: pd.DataFrame, columns: Iterable[str]) -> pd.DataFrame:
     styled = df.copy()
     for col in columns:
@@ -569,7 +770,7 @@ def section_header(title: str, subtitle: str) -> None:
     )
 
 
-st.set_page_config(page_title="Projeto TAF - Entrega II", layout="wide")
+st.set_page_config(page_title="Projeto TAF - Entrega Final", layout="wide")
 
 st.markdown(
     """
@@ -695,7 +896,7 @@ st.markdown(
 
         .module-grid {
             display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 0.65rem;
             margin: 0.65rem 0 1rem;
         }
@@ -914,9 +1115,9 @@ st.markdown(
     </style>
 
     <section class="hero">
-        <div class="eyebrow">Fase II - Gestao Quantitativa Brasil</div>
-        <h1>Filtro de Risco, Predicao e Backtesting</h1>
-        <p>Analise de ativos brasileiros com filtros econometricos, modelos preditivos e validacao temporal para apoiar a selecao inicial da carteira.</p>
+        <div class="eyebrow">Fase III - Gestao Quantitativa Brasil</div>
+        <h1>Risco, Predicao e Otimizacao de Carteiras</h1>
+        <p>Fluxo integrado para filtrar ativos brasileiros, prever retornos e transformar as previsoes em uma carteira otimizada.</p>
     </section>
 
     <div class="module-grid">
@@ -925,6 +1126,7 @@ st.markdown(
         <div class="module-card"><b>Fama-French</b><span>Exposicao a mercado, tamanho (SMB) e valor (HML).</span></div>
         <div class="module-card"><b>ARCH/GARCH</b><span>Dinamica da volatilidade e persistencia de risco.</span></div>
         <div class="module-card"><b>Predicao</b><span>Random Forest, Boosting, validacao temporal e backtesting.</span></div>
+        <div class="module-card"><b>Otimizacao</b><span>Markowitz, fronteira eficiente, HRP e impacto das previsoes na carteira.</span></div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -935,7 +1137,7 @@ with st.sidebar:
         """
         <div class="sidebar-brand">
             <strong>TAF Quant</strong>
-            <span>Ativos brasileiros e predicao</span>
+            <span>Ativos brasileiros, predicao e alocacao</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1009,7 +1211,7 @@ if asset_returns.empty:
     st.error("Nenhum ativo informado retornou dados validos.")
     st.stop()
 
-tabs = st.tabs(["Visao geral", "Fundamentalista", "CAPM", "Fama-French", "ARCH/GARCH", "Predicao", "Ranking"])
+tabs = st.tabs(["Visao geral", "Fundamentalista", "CAPM", "Fama-French", "ARCH/GARCH", "Predicao", "Otimizacao", "Ranking"])
 
 with tabs[0]:
     section_header("Visao geral", "Evolucao dos precos ajustados, retorno, volatilidade e drawdown.")
@@ -1264,6 +1466,116 @@ with tabs[5]:
             st.info("GRU e LSTM estao estruturados no app, mas exigem PyTorch instalado no ambiente.")
 
 with tabs[6]:
+    section_header("Otimizacao de carteiras", "Integracao da Fase II com Markowitz, fronteira eficiente e uma extensao HRP.")
+    st.markdown(
+        """
+        <div class="explain-box">
+            <b>Como a Fase III usa a predicao?</b>
+            <ul>
+                <li>O retorno historico anual e calculado para cada ativo.</li>
+                <li>O modelo escolhido na Fase II estima o proximo retorno diario de cada ativo.</li>
+                <li>O slider abaixo define quanto a previsao entra no retorno esperado usado por Markowitz.</li>
+                <li>Assim, a carteira final muda quando o usuario altera o peso das previsoes.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    optimizer_models = list(model_catalog().keys())
+    selected_optimizer_model = st.selectbox("Modelo usado nas previsoes da carteira", options=optimizer_models, index=0)
+    prediction_weight = st.slider("Peso da previsao no retorno esperado", min_value=0.0, max_value=1.0, value=0.35, step=0.05)
+    min_weight_cap = float(np.ceil((1 / max(len(asset_returns.columns), 1)) / 0.05) * 0.05)
+    default_weight_cap = max(0.45, min_weight_cap)
+    max_weight = st.slider("Peso maximo por ativo", min_value=min_weight_cap, max_value=1.00, value=default_weight_cap, step=0.05)
+    stress_shock = st.slider("Choque de mercado para teste de estresse", min_value=-0.30, max_value=0.00, value=-0.10, step=0.01)
+
+    if len(asset_returns.columns) < 2:
+        st.warning("A otimizacao precisa de pelo menos dois ativos.")
+    else:
+        expected_df = expected_return_table(asset_returns, benchmark_returns, selected_optimizer_model, prediction_weight)
+        expected_returns = expected_df.set_index("Ativo")["Retorno usado na otimizacao"]
+        covariance = asset_returns[expected_returns.index].cov() * TRADING_DAYS
+
+        st.subheader("Retornos esperados usados na otimizacao")
+        st.dataframe(
+            format_percent_columns(
+                expected_df,
+                ["Retorno historico anual", "Previsao anualizada", "Retorno usado na otimizacao"],
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        metrics_port, weights_port = portfolio_comparison(
+            expected_returns,
+            covariance,
+            asset_returns[expected_returns.index],
+            risk_free,
+            max_weight,
+        )
+
+        view_metrics_port = metrics_port.copy()
+        view_metrics_port["Retorno esperado"] = view_metrics_port["Retorno esperado"].map(pct)
+        view_metrics_port["Volatilidade"] = view_metrics_port["Volatilidade"].map(pct)
+        view_metrics_port["Sharpe"] = view_metrics_port["Sharpe"].map(lambda value: f"{value:.2f}" if pd.notna(value) else "-")
+
+        st.subheader("Comparacao das carteiras")
+        st.dataframe(view_metrics_port, use_container_width=True, hide_index=True)
+
+        frontier = efficient_frontier(expected_returns, covariance, max_weight)
+        fig = go.Figure()
+        if not frontier.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=frontier["Volatilidade"],
+                    y=frontier["Retorno esperado"],
+                    mode="lines",
+                    name="Fronteira eficiente",
+                    line={"color": "#2dd4bf", "width": 3},
+                )
+            )
+        fig.add_trace(
+            go.Scatter(
+                x=metrics_port["Volatilidade"],
+                y=metrics_port["Retorno esperado"],
+                mode="markers+text",
+                text=metrics_port["Carteira"],
+                textposition="top center",
+                name="Carteiras",
+                marker={"size": 13, "color": "#f2b84b"},
+            )
+        )
+        fig.update_layout(xaxis_title="Volatilidade anual", yaxis_title="Retorno esperado anual")
+        st.plotly_chart(style_figure(fig, height=430), use_container_width=True)
+
+        st.subheader("Composicao final")
+        fig_weights = px.bar(
+            weights_port,
+            x="Carteira",
+            y="Peso",
+            color="Ativo",
+            barmode="stack",
+            labels={"Peso": "Peso na carteira"},
+            color_discrete_sequence=px.colors.qualitative.Set2,
+        )
+        st.plotly_chart(style_figure(fig_weights, height=410), use_container_width=True)
+
+        weights_view = weights_port.pivot(index="Ativo", columns="Carteira", values="Peso").fillna(0).reset_index()
+        st.dataframe(format_percent_columns(weights_view, [col for col in weights_view.columns if col != "Ativo"]), use_container_width=True, hide_index=True)
+
+        st.subheader("Teste de estresse")
+        stress_df = stress_test_portfolios(weights_port, asset_returns[expected_returns.index], stress_shock)
+        stress_view = stress_df.copy()
+        stress_view["Impacto estimado"] = stress_view["Impacto estimado"].map(pct)
+        st.dataframe(stress_view, use_container_width=True, hide_index=True)
+        st.caption(
+            "O teste de estresse aplica um choque adverso escalado pela volatilidade de cada ativo. "
+            "E uma simplificacao para apresentacao, mas ajuda a comparar a fragilidade das carteiras."
+        )
+
+
+with tabs[7]:
     section_header("Filtro consolidado", "Ranking final combinando retorno, volatilidade, drawdown, beta e risco condicional.")
     perf = annualized_performance(asset_returns)
     capm_df = capm_dataframe(asset_returns, benchmark_returns, risk_free)

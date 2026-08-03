@@ -2,7 +2,7 @@
 
 Aplicativo em Streamlit para apoiar a analise quantitativa de ativos brasileiros. O projeto combina filtros de risco, indicadores fundamentalistas e modelos preditivos para transformar series financeiras em um painel de apoio a decisao.
 
-Esta versao corresponde a **Entrega II**. O app parte da analise econometrica da primeira etapa e acrescenta um modulo de inteligencia artificial para previsao de retornos e avaliacao historica das estrategias.
+Esta versao corresponde a **Entrega Final / Fase III**. O app integra a analise econometrica da Fase I, o motor preditivo da Fase II e a otimizacao de carteiras da Fase III em um fluxo unico de suporte a decisao.
 
 ## Proposta
 
@@ -11,6 +11,7 @@ O objetivo do app e ajudar o usuario a comparar ativos da B3 antes da composicao
 1. **Contexto do ativo**: dados fundamentalistas e comportamento historico.
 2. **Risco estatistico**: CAPM, Fama-French e volatilidade condicional.
 3. **Predicao**: modelos de machine learning e redes recorrentes para prever retornos futuros.
+4. **Alocacao**: otimizacao de carteira com Markowitz, fronteira eficiente e HRP.
 
 O foco da aplicacao e o mercado brasileiro. Por padrao, o benchmark usado e o Ibovespa (`^BVSP`) e os tickers seguem o formato do Yahoo Finance para ativos da B3, como `PETR4.SA`, `VALE3.SA` e `ITUB4.SA`.
 
@@ -26,6 +27,11 @@ O foco da aplicacao e o mercado brasileiro. Por padrao, o benchmark usado e o Ib
 - Validacao temporal com janela expansiva usando `sktime`.
 - Backtesting da estrategia preditiva contra buy and hold.
 - Estrutura de GRU e LSTM com PyTorch para capturar dependencias temporais.
+- Otimizacao de carteiras pelo modelo Media-Variancia de Markowitz.
+- Fronteira eficiente com restricao de peso maximo por ativo.
+- Extensao de otimizacao por Hierarchical Risk Parity (HRP).
+- Integracao entre previsoes da Fase II e retornos esperados usados na carteira final.
+- Teste de estresse simples para avaliar o impacto de choques adversos na carteira.
 
 ## Estrutura do app
 
@@ -37,6 +43,7 @@ O dashboard esta dividido em abas:
 - **Fama-French**: exposicao aos fatores de mercado, tamanho e valor.
 - **ARCH/GARCH**: volatilidade condicional e persistencia do risco.
 - **Predicao**: metricas de erro, acuracia direcional e backtesting.
+- **Otimizacao**: Markowitz, fronteira eficiente, HRP, pesos finais e teste de estresse.
 - **Ranking**: consolidacao dos filtros para comparar os ativos.
 
 ## Como executar
@@ -82,4 +89,13 @@ Para o modelo de Fama-French, o app espera um CSV com fatores brasileiros:
 
 O app foi pensado como uma ferramenta de apoio analitico. Ele nao gera recomendacao automatica de compra ou venda; a ideia e organizar evidencias quantitativas para facilitar a comparacao entre ativos.
 
-Na Entrega II, o destaque esta no motor preditivo: os modelos sao treinados respeitando a ordem temporal dos dados, e o desempenho e avaliado por metricas de erro, acuracia direcional e retorno acumulado de uma estrategia simples baseada no sinal da previsao.
+Na Fase III, o destaque esta na integracao entre predicao e alocacao. O usuario escolhe o peso das previsoes no retorno esperado, e o app mostra como essa escolha altera a composicao final da carteira. A carteira otimizada deixa de ser um modulo isolado e passa a ser consequencia dos filtros de risco e do motor preditivo.
+
+## Roteiro sugerido para apresentacao
+
+1. Apresente o problema de negocio e a arquitetura em tres camadas: risco, predicao e otimizacao.
+2. Mostre a Fase I: CAPM, Fama-French e ARCH/GARCH, explicando como beta, alpha e volatilidade ajudam a filtrar ativos.
+3. Mostre a Fase II: modelos de ML/DL, validacao temporal com `sktime` e backtesting sem vazamento de dados.
+4. Mostre a Fase III: retorno esperado historico versus retorno ajustado por previsao, fronteira eficiente, Markowitz e HRP.
+5. Demonstre um estudo de caso alterando o peso das previsoes e observando a mudanca nos pesos da carteira.
+6. Encerre com limitacoes honestas: dependencia do Yahoo Finance, qualidade dos fatores Fama-French brasileiros, risco de overfitting e necessidade de rebalanceamento futuro.
